@@ -142,7 +142,7 @@ jobs:
 
   release:
     name: Release ${{ github.repository }}
-    needs: build
+    needs: [check, build]
     runs-on: ubuntu-latest
 
     steps:

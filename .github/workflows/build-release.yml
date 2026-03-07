@@ -56,7 +56,7 @@ jobs:
           fi
 
   build:
-    name: Build for ${{ matrix.version }} / ${{ matrix.target }}
+    name: 2. Build for ${{ matrix.version }} / ${{ matrix.target }}
     needs: check
     if: needs.check.outputs.should_build == 'true'
     runs-on: ubuntu-latest
@@ -72,15 +72,14 @@ jobs:
             target: x86_64
             suffix: noarch
 
-    outputs:
-      version: ${{ steps.patch_version.outputs.version }}
-
     steps:
       - name: 🧾 Checkout repo
         uses: actions/checkout@v6
 
-      - name: 📛 Set PKG_NAME from repo
-        run: echo "PKG_NAME=${{ github.event.repository.name }}" >> "$GITHUB_ENV"
+      - name: 📛 Set Environment
+        run: |
+          echo "PKG_NAME=${{ github.event.repository.name }}" >> "$GITHUB_ENV"
+          echo "ARCH=${{ matrix.target }}-${{ matrix.version }}" >> "$GITHUB_ENV"
 
       - name: 🧰 Set up luci-app-cpu-status feed structure
         run: |
@@ -102,10 +101,6 @@ jobs:
             --exclude='feed' \
             --exclude='.github' \
             ./ feed/luci/applications/${PKG_NAME}/
-          
-      - name: 🧮 Compute ARCH
-        run: |
-          echo "ARCH=${{ matrix.target }}-${{ matrix.version }}" >> "$GITHUB_ENV"
 
       - name: 🏗️ Build with OpenWrt SDK
         uses: openwrt/gh-action-sdk@v10
@@ -141,22 +136,13 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    name: Release ${{ github.repository }}
+    name: 3. Release & Deploy ${{ github.repository }}
     needs: [check, build]
     runs-on: ubuntu-latest
 
     steps:
       - name: 🧾 Checkout repo
         uses: actions/checkout@v6
-
-      - name: 🔍 Extract version and release from Makefile
-        id: version
-        run: |
-          PKG_VERSION=$(grep -E '^PKG_VERSION *:?=' Makefile | head -n1 | cut -d= -f2 | tr -d '[:space:]')
-          PKG_RELEASE=$(grep -E '^PKG_RELEASE *:?=' Makefile | head -n1 | cut -d= -f2 | tr -d '[:space:]')
-          COMBINED_VERSION="${PKG_VERSION}-${PKG_RELEASE}"
-          echo "📦 Version: $COMBINED_VERSION"
-          echo "version=$COMBINED_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: ⬇️ Download all build artifacts
         uses: actions/download-artifact@v8
@@ -166,8 +152,8 @@ jobs:
       - name: 🗃️ Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Build-v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.check.outputs.main_full_version }}
+          name: Build-v${{ needs.check.outputs.main_full_version }}
           files: |
             ./release-assets/**/*.ipk
             ./release-assets/**/*.apk
@@ -176,14 +162,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout custom-packages repo
+      - name: 🔑 Checkout custom-packages repo
         uses: actions/checkout@v6
         with:
           repository: OneNAS-space/custom-packages
           token: ${{ secrets.CUSTOM_PACKAGES_TOKEN }}
           path: custom-packages
 
-      - name: Update luci artifacts
+      - name: 🚚 Update luci artifacts
         run: |
           set -e
           CURRENT_PKG="${{ github.event.repository.name }}"
@@ -212,4 +198,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add 24.10/luci/ 25.12/luci
           git commit -m "Update $CURRENT_PKG to v${{ needs.check.outputs.main_full_version }}" || echo "No changes"
-          git push
+          for i in {1..5}; do
+            git pull --rebase origin main && \
+            git push origin main && break || \
+            (echo "Conflict detected, retrying in 5s..." && sleep 5)
+          done

@@ -1,13 +1,15 @@
 name: Build OpenWrt Package
 permissions:
   contents: write
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   push:
     branches:
-      - master
+      - main
     paths:
-      - 'Makefile'
+      - '**/Makefile'
       - '!**/.github/**'
   workflow_dispatch:
 
@@ -73,10 +75,8 @@ jobs:
       - name: 🧾 Checkout repo
         uses: actions/checkout@v7
 
-      - name: 📛 Set Environment
-        run: |
-          echo "PKG_NAME=${{ github.event.repository.name }}" >> "$GITHUB_ENV"
-          echo "ARCH=${{ matrix.target }}-${{ matrix.version }}" >> "$GITHUB_ENV"
+      - name: 📛 Set PKG_NAME from repo
+        run: echo "PKG_NAME=${{ github.event.repository.name }}" >> "$GITHUB_ENV"
 
       - name: 🧰 Set up luci-app-cpu-status feed structure
         run: |
@@ -94,6 +94,10 @@ jobs:
             --exclude='feed' \
             --exclude='.github' \
             ./ feed/luci/applications/${PKG_NAME}/
+          
+      - name: 🧮 Compute ARCH
+        run: |
+          echo "ARCH=${{ matrix.target }}-${{ matrix.version }}" >> "$GITHUB_ENV"
 
       - name: 🏗️ Build with OpenWrt SDK
         uses: openwrt/gh-action-sdk@v11
@@ -108,8 +112,6 @@ jobs:
           
       - name: 🔍 Debug build output
         run: |
-          echo "=== Build directory structure ==="
-          find . -name "*.apk" -type f 2>/dev/null || echo "No .apk files found"
           echo "=== bin directory structure ==="
           ls -la bin/ 2>/dev/null || echo "No bin directory found"
           if [ -d "bin/packages" ]; then
@@ -126,8 +128,9 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    name: 3. Release & Deploy ${{ github.repository }}
+    name: Release ${{ github.repository }}
     needs: [check, build]
+    if: needs.check.outputs.should_build == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -142,8 +145,8 @@ jobs:
       - name: 🗃️ Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ needs.check.outputs.main_full_version }}
-          name: Build-${{ needs.check.outputs.main_full_version }}
+          tag_name: ${{ needs.check.outputs.tag_name }}
+          name: Build-${{ needs.check.outputs.tag_name }}
           files: |
             ./release-assets/**/*.apk
           draft: false
@@ -181,6 +184,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "releases/packages-25.12/luci/"
           git commit -m "Update $CURRENT_PKG to ${{ needs.check.outputs.main_full_version }}" || echo "No changes"
+          
           for i in {1..5}; do
             git pull --rebase origin main && \
             git push origin main && break || \

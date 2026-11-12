@@ -93,6 +93,8 @@ jobs:
             --exclude='.git' \
             --exclude='feed' \
             --exclude='.github' \
+            --exclude='local-patches' \
+            --exclude='screenshots' \
             ./ feed/luci/applications/${PKG_NAME}/
           
       - name: 🧮 Compute ARCH

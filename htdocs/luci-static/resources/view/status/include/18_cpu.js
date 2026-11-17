@@ -178,6 +178,9 @@ document.head.append(E('style', {'type': 'text/css'},
 	font-size: 13px;
 	white-space: nowrap;
 }
+.cpu-status-pie-list-foot {
+	margin: 18px 0 0 calc(-1 * var(--cpu-pie-shift, 0px));
+}
 .cpu-status-pie-list div {
 	display: flex;
 	align-items: center;
@@ -603,11 +606,20 @@ const pie = {
 // ring each. detail: slices with legend/values and magnifier, or just the load.
 const pieView = (total, detail) => ({
 	makeTable() {
-		this.grid  = E('div', { 'class': 'cpu-status-pie-grid' });
-		this.table = E('div', { 'class': 'cpu-status-pie' },
-			(detail && !total) ? [ this.grid, pie.makeLegend() ] : [ this.grid ]);
+		this.grid   = E('div', { 'class': 'cpu-status-pie-grid' });
+		// Under the rings of the CPUs: the total of all parameters, as in the
+		// detailed total view (only the names until the load is calculated)
+		this.footer = (detail && !total) ? pie.makeLegend() : null;
+		this.table  = E('div', { 'class': 'cpu-status-pie' },
+			[ this.grid, this.footer ].filter(e => e));
 	},
 	append(cpuNum, cpuLoadObj, cpuLoadFlag) {
+		if(this.footer && cpuNum == Infinity && cpuLoadFlag) {
+			let list = pie.makeList(pie.rows(cpuLoadObj));
+			list.classList.add('cpu-status-pie-list-foot');
+			this.table.replaceChild(list, this.footer);
+			this.footer = list;
+		};
 		if((cpuNum == Infinity) != total) return;
 		this.grid.append(
 			pie.makeItem({ big: total, detail },

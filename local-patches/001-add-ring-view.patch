@@ -1,6 +1,6 @@
-From d9253b150a8466067449575778db0d79569d3219 Mon Sep 17 00:00:00 2001
+From 07967382634acfae1eb90990637f22a8aea44df1 Mon Sep 17 00:00:00 2001
 From: Jackie Han <jackie.han@gmail.com>
-Date: Thu, 12 Nov 2026 12:55:17 +0800
+Date: Tue, 17 Nov 2026 13:05:47 +0800
 Subject: [PATCH] luci-app-cpu-status: show the CPU load as rings
 
 Replace the table views of the status card with ring (donut) views, one
@@ -16,21 +16,22 @@ In the detailed views a magnifier follows the pointer over a ring and
 enlarges the ring along its length only, so that slices of a fraction
 of a percent are readable. In the total view the parameters it shows are
 emphasised in the list under the ring; for a CPU the list of all
-parameters is shown below the magnifier. The magnifier follows the theme
+parameters is shown below the magnifier, and the total of all parameters
+is shown once under the rings of the CPUs. The magnifier follows the theme
 colors and stays while the card is refreshed.
 
 The content of the card is aligned with the card title in any theme,
 and the rings are centered in the whole card. A stored view mode that
 does not exist is reset to the first one.
 ---
- .../resources/view/status/include/18_cpu.js   | 766 ++++++++++++++----
- 1 file changed, 593 insertions(+), 173 deletions(-)
+ .../resources/view/status/include/18_cpu.js   | 778 ++++++++++++++----
+ 1 file changed, 605 insertions(+), 173 deletions(-)
 
 diff --git a/htdocs/luci-static/resources/view/status/include/18_cpu.js b/htdocs/luci-static/resources/view/status/include/18_cpu.js
-index 8aa0242..28c2f73 100644
+index 8aa0242..6a15905 100644
 --- a/htdocs/luci-static/resources/view/status/include/18_cpu.js
 +++ b/htdocs/luci-static/resources/view/status/include/18_cpu.js
-@@ -30,8 +30,592 @@ document.head.append(E('style', {'type': 'text/css'},
+@@ -30,8 +30,604 @@ document.head.append(E('style', {'type': 'text/css'},
  .cpu-status-view-mode-entry-checked:hover {
  	opacity: 1.0;
  }
@@ -181,6 +182,9 @@ index 8aa0242..28c2f73 100644
 +	gap: 4px 16px;
 +	font-size: 13px;
 +	white-space: nowrap;
++}
++.cpu-status-pie-list-foot {
++	margin: 18px 0 0 calc(-1 * var(--cpu-pie-shift, 0px));
 +}
 +.cpu-status-pie-list div {
 +	display: flex;
@@ -607,11 +611,20 @@ index 8aa0242..28c2f73 100644
 +// ring each. detail: slices with legend/values and magnifier, or just the load.
 +const pieView = (total, detail) => ({
 +	makeTable() {
-+		this.grid  = E('div', { 'class': 'cpu-status-pie-grid' });
-+		this.table = E('div', { 'class': 'cpu-status-pie' },
-+			(detail && !total) ? [ this.grid, pie.makeLegend() ] : [ this.grid ]);
++		this.grid   = E('div', { 'class': 'cpu-status-pie-grid' });
++		// Under the rings of the CPUs: the total of all parameters, as in the
++		// detailed total view (only the names until the load is calculated)
++		this.footer = (detail && !total) ? pie.makeLegend() : null;
++		this.table  = E('div', { 'class': 'cpu-status-pie' },
++			[ this.grid, this.footer ].filter(e => e));
 +	},
 +	append(cpuNum, cpuLoadObj, cpuLoadFlag) {
++		if(this.footer && cpuNum == Infinity && cpuLoadFlag) {
++			let list = pie.makeList(pie.rows(cpuLoadObj));
++			list.classList.add('cpu-status-pie-list-foot');
++			this.table.replaceChild(list, this.footer);
++			this.footer = list;
++		};
 +		if((cpuNum == Infinity) != total) return;
 +		this.grid.append(
 +			pie.makeItem({ big: total, detail },
@@ -623,7 +636,7 @@ index 8aa0242..28c2f73 100644
  return baseclass.extend({
  	title             : _('CPU Load'),
  
-@@ -112,181 +696,13 @@ return baseclass.extend({
+@@ -112,181 +708,13 @@ return baseclass.extend({
  		return retArray;
  	},
  
@@ -809,7 +822,7 @@ index 8aa0242..28c2f73 100644
  
  	makeCPUTable(cpuLoadArray) {
  		let currentView = (this.availableViewModes[this.viewMode] !== undefined) ?
-@@ -316,6 +732,8 @@ return baseclass.extend({
+@@ -316,6 +744,8 @@ return baseclass.extend({
  			delete this.availableViewModes[3];
  			if(this.viewMode > 1) this.viewMode = 0;
  		};
@@ -818,7 +831,7 @@ index 8aa0242..28c2f73 100644
  
  		let cpuLoadArray = this.calcCPULoad(cpuStatArray);
  		let cpuTable = this.makeCPUTable(cpuLoadArray);
-@@ -353,11 +771,13 @@ return baseclass.extend({
+@@ -353,11 +783,13 @@ return baseclass.extend({
  
  		this.lastStatArray = cpuStatArray;
  
@@ -833,3 +846,5 @@ index 8aa0242..28c2f73 100644
 +		return root;
  	},
  });
+-- 
+2.43.0

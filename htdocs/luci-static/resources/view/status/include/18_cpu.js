@@ -32,26 +32,7 @@ document.head.append(E('style', {'type': 'text/css'},
 }
 .cpu-status-pie {
 	padding-bottom: 18px;
-}
-.cpu-status-pie-legend {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: center;
-	gap: 6px 18px;
-	margin: 18px 0 0 calc(-1 * var(--cpu-pie-shift, 0px));
-	padding: 0;
-	font-size: 13px;
-}
-.cpu-status-pie-legend span {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-}
-.cpu-status-pie-legend i {
-	display: inline-block;
-	width: 11px;
-	height: 11px;
-	border-radius: 3px;
+	font-variant-numeric: tabular-nums;
 }
 .cpu-status-pie-grid {
 	display: flex;
@@ -156,13 +137,6 @@ document.head.append(E('style', {'type': 'text/css'},
 }
 .cpu-status-pie-big {
 	width: auto;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 14px;
-}
-.cpu-status-pie-big svg {
-	margin: 0;
 }
 .cpu-status-pie-big svg .cpu-status-pie-num {
 	font-size: 20px;
@@ -174,19 +148,17 @@ document.head.append(E('style', {'type': 'text/css'},
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
-	gap: 4px 16px;
+	gap: 4px 10px;
+	margin: 18px 0 0 calc(-1 * var(--cpu-pie-shift, 0px));
 	font-size: 13px;
 	white-space: nowrap;
-}
-.cpu-status-pie-list-foot {
-	margin: 18px 0 0 calc(-1 * var(--cpu-pie-shift, 0px));
 }
 .cpu-status-pie-list div {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	margin: 0 -6px;
-	padding: 1px 6px;
+	gap: 5px;
+	margin: 0 -4px;
+	padding: 1px 4px;
 	border-radius: 5px;
 }
 .cpu-status-pie-list-hl div {
@@ -198,9 +170,19 @@ document.head.append(E('style', {'type': 'text/css'},
 }
 @media (max-width: 900px) {
 	.cpu-status-pie-list {
-		gap: 4px 12px;
+		gap: 4px 8px;
 		font-size: 11px;
 	}
+}
+.cpu-status-pie-val {
+	display: inline-grid;
+}
+.cpu-status-pie-val > * {
+	grid-area: 1 / 1;
+	justify-self: start;
+}
+.cpu-status-pie-val > [aria-hidden] {
+	visibility: hidden;
 }
 .cpu-status-pie-list i {
 	display: inline-block;
@@ -211,7 +193,7 @@ document.head.append(E('style', {'type': 'text/css'},
 `));
 
 // Shift the card content so that the text of the first view mode entry (and the
-// legend below it) starts exactly where the text of the card title starts, in any
+// list of the parameters below the rings) starts exactly where the text of the card title starts, in any
 // theme. Done once the node is in the page and measurable.
 let alignMargin = null;
 function alignWithTitle(root, tries) {
@@ -246,7 +228,7 @@ function alignWithTitle(root, tries) {
 	root.style.setProperty('--cpu-pie-shift', alignMargin + 'px');
 }
 
-// Rings used by all four views. Only the busy part of a ring is drawn (idle is
+// Rings used by both views. Only the busy part of a ring is drawn (idle is
 // left blank). Slices are named and ordered as in top: usr sys nic idle io irq sirq, the
 // colors are assigned so that neighbouring slices have contrasting hues.
 const pie = {
@@ -259,12 +241,11 @@ const pie = {
 		[ 'loadIrq',  'irq',  '#a855f7' ],
 		[ 'loadSirq', 'sirq', '#22c55e' ],
 	],
-	// Single color ring of the views without details
-	busyColor: '#3b82f6',
-	// Geometry of the rings: one CPU, and the total (big)
-	// (caption: list of all values below the magnifier; the total has them next to it)
-	small   : { size: 116, radius: 41, width: 18, caption: true  },
-	big     : { size: 160, radius: 58, width: 22, caption: false },
+	// Geometry of the rings: one CPU, and the total (big). numDy/nameDy: offset of
+	// the load and of the name from the center. caption: list of all values below
+	// the magnifier (the total has them in the list under the ring, emphasised).
+	small   : { size: 116, radius: 41, width: 18, numDy: -1, nameDy: 14, caption: true  },
+	big     : { size: 160, radius: 58, width: 22, numDy: -4, nameDy: 16, caption: false },
 	// Magnifier shown while hovering over a ring: diameter in px, zoom factor
 	// along the ring, width of the band inside the magnifier (1 = the same as
 	// the ring itself, 3 = three times wider), extra px around the ring in which
@@ -346,34 +327,38 @@ const pie = {
 		el.textContent = text;
 		return el;
 	},
-	// rows: null while the load is being calculated. With a magnifier the slices
-	// are separated by a small gap.
-	makeDonut(geo, name, rows, loadAvg, magnifier) {
+	// rows: null while the load is being calculated. The slices are separated by
+	// a small gap.
+	makeDonut(geo, name, rows, loadAvg) {
 		let M   = geo.size / 2;
 		let svg = this.makeSvg(geo.size);
-		this.drawRing(svg, M, geo.radius, geo.width, rows || [],
-			(magnifier) ? [ 1.2, 2.2, 0.6 ] : [ 0, 0, 0.6 ]);
-		if(rows && magnifier) this.attachLens(svg, rows, geo);
+		this.drawRing(svg, M, geo.radius, geo.width, rows || [], [ 1.2, 2.2, 0.6 ]);
+		if(rows) this.attachLens(svg, rows, geo);
 		svg.append(
-			this.svgText('cpu-status-pie-num', M, M - ((geo === this.big) ? 4 : 1),
+			this.svgText('cpu-status-pie-num', M, M + geo.numDy,
 				(rows && !isNaN(loadAvg)) ? loadAvg + '%' : '-'),
-			this.svgText('cpu-status-pie-name', M, M + ((geo === this.big) ? 16 : 14), name)
+			this.svgText('cpu-status-pie-name', M, M + geo.nameDy, name)
 		);
 		return svg;
 	},
-	// Legend, once below all the rings
-	makeLegend() {
-		return E('div', { 'class': 'cpu-status-pie-legend' },
-			this.slices.map(([, label, color]) =>
-				E('span', {}, [ this.swatch(color), label ])));
+	// A value in %: one decimal place, 100 without
+	pct(value) {
+		return (value >= 100) ? '100%' : value.toFixed(1) + '%';
 	},
-	// All parameters with their values, in one row under the total
+	// All parameters with their values, in one row (only the names while the load
+	// is being calculated). Every value has the room of 99.9%, the widest it can
+	// be, so that the row does not move when the numbers change.
 	makeList(rows) {
 		let list = E('div', { 'class': 'cpu-status-pie-list' },
-			rows.map(r => E('div', { 'data-label': r.label }, [
-				this.swatch(r.color),
-				`${r.label} ${r.value.toFixed(1)}%`,
-			])));
+			(rows || this.slices.map(([, label, color]) => ({ label, color }))).map(r =>
+				E('div', { 'data-label': r.label }, [
+					this.swatch(r.color),
+					r.label,
+					E('span', { 'class': 'cpu-status-pie-val' }, [
+						E('span', {}, (r.value === undefined) ? '' : this.pct(r.value)),
+						E('span', { 'aria-hidden': 'true' }, '99.9%'),
+					]),
+				])));
 		this.markList(list);
 		return list;
 	},
@@ -392,26 +377,20 @@ const pie = {
 				.filter(r => !r.idle && r.value >= 0.5)
 				.sort((a, b) => b.value - a.value)
 				.slice(0, 2)
-				.map(r => E('div', {}, `${r.label} ${r.value.toFixed(1)}%`)));
+				.map(r => E('div', {}, `${r.label} ${this.pct(r.value)}`)));
 	},
-	// cfg.big: the total (a big ring), cfg.detail: slices, magnifier and values
-	// instead of a single busy ring.
-	makeItem(cfg, name, cpuLoadObj, cpuLoadFlag) {
-		let geo  = (cfg.big) ? this.big : this.small;
-		let rows = null;
-		if(cpuLoadFlag) {
-			rows = (cfg.detail) ? this.rows(cpuLoadObj) : [{
-				label: _('Load'), color: this.busyColor,
-				value: cpuLoadObj.loadAvg, from: 0, to: cpuLoadObj.loadAvg,
-			}];
-		};
+	// big: the total (a big ring), otherwise one CPU (a small ring with the two
+	// largest parameters under it: together exactly as high as the big ring, so
+	// that both views are equally high). rows: null while the load is being
+	// calculated.
+	makeItem(big, name, rows, loadAvg) {
 		return E('div', {
-				'class': 'cpu-status-pie-item' + ((cfg.big) ? ' cpu-status-pie-big' : ''),
-				'title': (cpuLoadFlag) ? '' : _('Calculating') + '...',
+				'class': 'cpu-status-pie-item' + ((big) ? ' cpu-status-pie-big' : ''),
+				'title': (rows) ? '' : _('Calculating') + '...',
 			},
 			[
-				this.makeDonut(geo, name, rows, cpuLoadObj.loadAvg, cfg.detail),
-				(!cfg.detail) ? null : (cfg.big) ? ((rows) ? this.makeList(rows) : null) : this.makeTop(rows),
+				this.makeDonut((big) ? this.big : this.small, name, rows, loadAvg),
+				(big) ? null : this.makeTop(rows),
 			].filter(e => e)
 		);
 	},
@@ -473,14 +452,14 @@ const pie = {
 	},
 	getLens() {
 		if(!this.lens) {
-			let L       = this.lensSize;
+			let D       = this.lensSize;
 			let view    = E('div', { 'style': 'position:absolute;left:0;top:0;width:100%;height:100%' });
 			let glass   = E('div', { 'class': 'cpu-status-pie-lens-glass' },
 				[ view, E('div', { 'class': 'cpu-status-pie-lens-mark' }) ]);
 			let caption = E('div', { 'class': 'cpu-status-pie-lens-caption' });
 			let box     = E('div', {
 				'class': 'cpu-status-pie-lens',
-				'style': `width:${L}px;height:${L}px`,
+				'style': `width:${D}px;height:${D}px`,
 			}, [ glass, caption ]);
 			document.body.append(box);
 			this.lens = { box, glass, view, caption, key: null, rowsKey: null, shown: false };
@@ -488,8 +467,10 @@ const pie = {
 		return this.lens;
 	},
 	hideLens() {
-		this.hlLabels = null;
-		document.querySelectorAll('.cpu-status-pie-list').forEach(l => this.markList(l));
+		if(this.hlLabels) {
+			this.hlLabels = null;
+			document.querySelectorAll('.cpu-status-pie-list').forEach(l => this.markList(l));
+		};
 		if(this.lens) {
 			this.lens.box.style.display = 'none';
 			this.lens.shown = false;
@@ -512,7 +493,7 @@ const pie = {
 	update() {
 		let p = this.pointer;
 		if(!p) return this.hideLens();
-		let L = this.lensSize, Z = this.lensZoom;
+		let D = this.lensSize, Z = this.lensZoom;
 		let svgs = Array.from(document.querySelectorAll('.cpu-status-pie-item svg'))
 			.filter(s => s._pie);
 		let now = Date.now();
@@ -540,6 +521,7 @@ const pie = {
 
 		let info = hit.svg._pie;
 		let R    = info.geo.radius;
+		let cap  = info.geo.caption;
 		let lens = this.getLens();
 		let { Rz, Mz } = this.zoomGeometry(info.geo);
 
@@ -562,29 +544,27 @@ const pie = {
 		if(pos < 0) pos += 100;
 		// The same point in the magnified ring (the distance from the ring is not magnified)
 		let rz = Rz + (hit.d - R);
-		lens.zoomed.style.left = (L / 2 - (Mz + rz * Math.sin(angle))) + 'px';
-		lens.zoomed.style.top  = (L / 2 - (Mz - rz * Math.cos(angle))) + 'px';
+		lens.zoomed.style.left = (D / 2 - (Mz + rz * Math.sin(angle))) + 'px';
+		lens.zoomed.style.top  = (D / 2 - (Mz - rz * Math.cos(angle))) + 'px';
 
 		// Slices within the visible section of the ring
-		let half = (L / 2 / Z) / R / (2 * Math.PI) * 100;
+		let half = (D / 2 / Z) / R / (2 * Math.PI) * 100;
 		let near = info.rows.filter(r => r.value > 0 &&
 			[ -100, 0, 100 ].some(s => (r.from + s < pos + half) && (r.to + s > pos - half)))
 			.map(r => r.label);
 		// The list always shows every parameter, those in the magnifier are emphasised
-		let rowsKey = info.sig + '#' + near.join();
-		lens.caption.style.display = (info.geo.caption) ? '' : 'none';
-		if(!info.geo.caption) {
+		lens.caption.style.display = (cap) ? '' : 'none';
+		if(!cap) {
 			this.hlLabels = near;
-			let list = hit.svg.closest('.cpu-status-pie-item').querySelector('.cpu-status-pie-list');
+			let list = document.querySelector('.cpu-status-pie-list');
 			if(list) this.markList(list);
-		};
-		if(info.geo.caption && rowsKey !== lens.rowsKey) {
-			lens.rowsKey = rowsKey;
+		} else if(info.sig + '#' + near.join() !== lens.rowsKey) {
+			lens.rowsKey = info.sig + '#' + near.join();
 			lens.caption.textContent = '';
 			info.rows.forEach(r => lens.caption.append(
 				E('div', { 'class': near.includes(r.label) ? '' : 'dim' }, [
 					this.swatch(r.color),
-					`${r.label} ${r.value.toFixed(1)}%`,
+					`${r.label} ${this.pct(r.value)}`,
 				])
 			));
 		};
@@ -592,39 +572,31 @@ const pie = {
 		// The magnifier is centered on the pointer, the list of slices is below it
 		lens.box.style.display = 'block';
 		lens.shown = true;
-		let left = Math.min(Math.max(4, p.x - L / 2), window.innerWidth - L - 4),
-		    top  = Math.min(Math.max(4, p.y - L / 2), window.innerHeight - L - 4);
+		let left = Math.min(Math.max(4, p.x - D / 2), window.innerWidth - D - 4),
+		    top  = Math.min(Math.max(4, p.y - D / 2), window.innerHeight - D - 4);
 		lens.box.style.left = left + 'px';
 		lens.box.style.top  = top + 'px';
-		let capH = (info.geo.caption) ? lens.caption.offsetHeight : 0;
+		let capH = (cap) ? lens.caption.offsetHeight : 0;
 		lens.box.classList.toggle('cpu-status-pie-lens-up',
-			(top + L + 6 + capH > window.innerHeight - 4) && (top - 6 - capH > 4));
+			(top + D + 6 + capH > window.innerHeight - 4) && (top - 6 - capH > 4));
 	},
 };
 
-// A view of the rings. total: only the total (a big ring) or only the CPUs, one
-// ring each. detail: slices with legend/values and magnifier, or just the load.
-const pieView = (total, detail) => ({
+// A view of the rings. total: the total (a big ring), otherwise one ring for each
+// CPU. Under the rings: all parameters of the total.
+const pieView = total => ({
 	makeTable() {
-		this.grid   = E('div', { 'class': 'cpu-status-pie-grid' });
-		// Under the rings of the CPUs: the total of all parameters, as in the
-		// detailed total view (only the names until the load is calculated)
-		this.footer = (detail && !total) ? pie.makeLegend() : null;
-		this.table  = E('div', { 'class': 'cpu-status-pie' },
-			[ this.grid, this.footer ].filter(e => e));
+		this.grid  = E('div', { 'class': 'cpu-status-pie-grid' });
+		this.table = E('div', { 'class': 'cpu-status-pie' }, this.grid);
 	},
 	append(cpuNum, cpuLoadObj, cpuLoadFlag) {
-		if(this.footer && cpuNum == Infinity && cpuLoadFlag) {
-			let list = pie.makeList(pie.rows(cpuLoadObj));
-			list.classList.add('cpu-status-pie-list-foot');
-			this.table.replaceChild(list, this.footer);
-			this.footer = list;
-		};
-		if((cpuNum == Infinity) != total) return;
+		let isTotal = (cpuNum == Infinity);
+		let rows    = (cpuLoadFlag) ? pie.rows(cpuLoadObj) : null;
+		if(isTotal) this.table.append(pie.makeList(rows));
+		if(isTotal != total) return;
 		this.grid.append(
-			pie.makeItem({ big: total, detail },
-				(total) ? _('Total load') : _('CPU') + ' ' + cpuNum,
-				cpuLoadObj, cpuLoadFlag));
+			pie.makeItem(total, (total) ? _('Total load') : _('CPU') + ' ' + cpuNum,
+				rows, cpuLoadObj.loadAvg));
 	},
 });
 
@@ -634,10 +606,8 @@ return baseclass.extend({
 	viewName          : 'cpu_status',
 
 	availableViewModes: {
-		0: [ 'allCPUs', _('Load') ],
-		1: [ 'allCPUsDetail', _('Detailed load') ],
-		2: [ 'eachCPU', _('Load of each CPU') ],
-		3: [ 'eachCPUDetail', _('Detailed load of each CPU') ],
+		0: [ 'allCPUs', _('Detailed load') ],
+		1: [ 'eachCPU', _('Detailed load of each CPU') ],
 	},
 
 	viewMode          : 0,
@@ -708,13 +678,9 @@ return baseclass.extend({
 		return retArray;
 	},
 
-	allCPUs          : pieView(true,  false),
+	allCPUs          : pieView(true),
 
-	allCPUsDetail    : pieView(true,  true),
-
-	eachCPU          : pieView(false, false),
-
-	eachCPUDetail    : pieView(false, true),
+	eachCPU          : pieView(false),
 
 	makeCPUTable(cpuLoadArray) {
 		let currentView = (this.availableViewModes[this.viewMode] !== undefined) ?
@@ -740,9 +706,7 @@ return baseclass.extend({
 		// For single-core CPU
 		if(cpuStatArray.length == 2) {
 			cpuStatArray = cpuStatArray.slice(1, 2);
-			delete this.availableViewModes[2];
-			delete this.availableViewModes[3];
-			if(this.viewMode > 1) this.viewMode = 0;
+			delete this.availableViewModes[1];
 		};
 		// A stored mode that does not exist (any more)
 		if(this.availableViewModes[this.viewMode] === undefined) this.viewMode = 0;
